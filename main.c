@@ -4,7 +4,12 @@
 #include<unistd.h> /* fork() */
 #include<sys/types.h> /* pid_t */
 #include<sys/wait.h> /* waitpid() */
+#include<stdbool.h> /* bool */
+#include<errno.h> /* errno */
 
+#define LINE_MAX 256
+#define CONFIG_PATH "/home/networktom/C/src/FileMonitor/FileMonitor.conf"
+#define TEMP_CONFIG_PATH "/home/networktom/C/src/FileMonitor/FileMonitor.conf.tmp"
 
 enum filemonitor_error_code {
 	FILEMONITOR_SUCCESS = 0,
@@ -14,11 +19,15 @@ enum filemonitor_error_code {
 	FILEMONITOR_FAILURE_UNKNOWN_OPTION,
 	FILEMONITOR_FAILURE_EDIT_CONFIG_WAITPID_FAILED,
 	FILEMONITOR_FAILURE_EDIT_CONFIG_FORK_FAILED,
-	FILEMONITOR_FAILURE_EDIT_CONFIG_VIM_NOT_INSTALLED
+	FILEMONITOR_FAILURE_EDIT_CONFIG_VIM_NOT_INSTALLED,
+	FILEMONITOR_FAILURE_CHECK_CONFIG_FOPEN_FAILED,
+	FILEMONITOR_FAILURE_CHECK_CONFIG_FPUTS_FAILED,
+	FILEMONITOR_FAILURE_CHECK_CONFIG_RENAME_FAILED
 };
 
 enum filemonitor_error_code filemonitor_exec(void);
 enum filemonitor_error_code filemonitor_check_config(void);
+bool is_valid_config_line(const char *line);
 enum filemonitor_error_code filemonitor_edit_config(void);
 enum filemonitor_error_code filemonitor_check_log(void);
 void filemonitor_print_help(void);
@@ -81,7 +90,111 @@ enum filemonitor_error_code filemonitor_exec(void)
 
 enum filemonitor_error_code filemonitor_check_config(void)
 {
-	return FILEMONITOR_SUCCESS;
+	FILE *config_in = NULL;
+	FILE *config_out = NULL;
+
+	config_in = fopen(CONFIG_PATH, "r");
+	if (config_in == NULL) {
+		fprintf(stderr, "FileMonitor: Error: Could not open %s for reading: %s\n", CONFIG_PATH, strerror(errno));
+		return FILEMONITOR_FAILURE_CHECK_CONFIG_FOPEN_FAILED;
+	}
+
+	config_out = fopen(TEMP_CONFIG_PATH, "w");
+	if (config_out == NULL) {
+		fprintf(stderr, "FileMonitor: Error: Could not open temp file %s for writing: %s\n", TEMP_CONFIG_PATH, strerror(errno));
+		fclose(config_in);
+		return FILEMONITOR_FAILURE_CHECK_CONFIG_FOPEN_FAILED;
+	}
+	
+	char line[LINE_MAX];
+	enum filemonitor_error_code result = FILEMONITOR_CLEAR;
+	int line_num = 0;
+	int lines_removed = 0;
+
+	while (fgets(line, LINE_MAX, config_in) != NULL) {
+		line_num++;
+		
+		if (strchr(line, '\n') == NULL && !feof(config_in)) {
+			fprintf(stderr, "Line %d exceeds buffer size (%d) and will be removed.\n", line_num, LINE_MAX);
+			lines_removed++;
+			
+			char discard[LINE_MAX];
+			while (strchr(line, '\n') == NULL && fgets(discard, LINE_MAX, config_in) != NULL)
+				;
+			continue;
+		}
+
+		if (is_valid_config_line(line)) {
+			if (fputs(line, config_out) == EOF) {
+				fprintf(stderr, "FileMonitor: Error: Failed to write to temp config file.\n");
+				result = FILEMONITOR_FAILURE_CHECK_CONFIG_FPUTS_FAILED;
+				break;
+			}
+		} else {
+			fprintf(stderr, "FileMonitor: Line %d removed due to bad formatting: %s", line_num, line);
+			lines_removed++;
+		}
+	}
+
+	fclose(config_in);
+	fclose(config_out);
+
+	/* Replace original file if processing was successful */
+	if (result == FILEMONITOR_SUCCESS) {
+		if (rename(TEMP_CONFIG_PATH, CONFIG_PATH) != 0) {
+			fprintf(stderr, "FileMonitor: Error: Failed to replace original config file with cleaned version: %s\n", strerror(errno));
+			/* Attempt to remove temp file, but keep the original */
+			remove(TEMP_CONFIG_PATH);
+			result = FILEMONITOR_FAILURE_CHECK_CONFIG_RENAME_FAILED;
+		} else {
+			printf("Configuration check complete.\n");
+			if (lines_removed > 0) {
+				printf("Successfully removed %d invalid lines from %s.\n", lines_removed, CONFIG_PATH);
+			} else {
+				printf("%s is clean.\n", CONFIG_PATH);
+			}
+		}
+	} else {
+		/* If an error occurred during reading/writing, remove the temporary file and keep the original */
+		remove(TEMP_CONFIG_PATH);
+		fprintf(stderr, "FileMonitor: Configuration check failed before completion. Original file retained.\n");
+	}
+
+	return result;
+}
+
+bool is_valid_config_line(const char *line)
+{
+	/* Trim leading whitespace (important for checking if it's an empty line or comment) */
+	while (*line == ' ' || *line == '\t') {
+		line++;
+	}
+
+	/* Check for empty line or comment line (valid) */
+	if (*line == '\0' || *line == '\n' || *line == '#') {
+		return true;
+	}
+
+	/* 2. Check for the '=' sign */
+	const char *equals_sign = strchr(line, '=');
+	if (equals_sign == NULL) {
+		/* Non-empty, non-comment line without '=' */
+		return false;
+	}
+
+	/* 3. Check for space before '=' (Rule: Eliminate spaces before and after the equals sign) */
+	if (equals_sign > line && (*(equals_sign - 1) == ' ' || *(equals_sign - 1) == '\t')) {
+		fprintf(stderr, "Invalid line: Space found before '=': %s", line);
+		return false;
+	}
+
+	/* 4. Check for space after '=' (Rule: Eliminate spaces before and after the equals sign) */
+	if (*(equals_sign + 1) == ' ' || *(equals_sign + 1) == '\t') {
+		fprintf(stderr, "Invalid line: Space found after '=': %s", line);
+		return false;
+	}
+
+	return true;
 }
 
 enum filemonitor_error_code filemonitor_edit_config(void)
@@ -139,6 +252,9 @@ void filemonitor_print_error_codes(void)
 	printf("\t%d\t= Could not fork a new process when attempting to edit FileMonitor.conf in function filemonitor_edit_config\n", FILEMONITOR_FAILURE_EDIT_CONFIG_FORK_FAILED);
 	printf("\t%d\t= waitpid() failed in function filemonitor_edit_config()\n", FILEMONITOR_FAILURE_EDIT_CONFIG_WAITPID_FAILED);
 	printf("\t%d\t= Could not find Vim in function filemonitor_edit_config()\n", FILEMONITOR_FAILURE_EDIT_CONFIG_VIM_NOT_INSTALLED);
+	printf("\t%d\t= fopen() failed to open FileMonitor.conf for read/write in function filemonitor_check_config(). File does not exist.\n", FILEMONITOR_FAILURE_CHECK_CONFIG_FOPEN_FAILED);
+	printf("\t%d\t= fputs() failed to write to FileMonitor.conf.tmp in function filemonitor_check_config()\n", FILEMONITOR_FAILURE_CHECK_CONFIG_FPUTS_FAILED);
+	printf("\t%d\t= rename() failed to rename FileMonitor.conf.tmp to FileMonitor.conf in function filemonitor_check_config()\n", FILEMONITOR_FAILURE_CHECK_CONFIG_RENAME_FAILED);
 }
 
 void filemonitor_print_version(void)
