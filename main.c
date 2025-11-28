@@ -20,6 +20,7 @@ enum filemonitor_error_code {
 enum filemonitor_error_code filemonitor_exec(void);
 enum filemonitor_error_code filemonitor_check_config(void);
 enum filemonitor_error_code filemonitor_edit_config(void);
+enum filemonitor_error_code filemonitor_check_log(void);
 void filemonitor_print_help(void);
 void filemonitor_print_error_codes(void);
 void filemonitor_print_version(void);
@@ -40,7 +41,18 @@ int main (int argc, char *argv[])
 		}
 	} else if (strcmp(option, "--check-config") == 0) {
 		result = filemonitor_check_config();
+		if (result != FILEMONITOR_SUCCESS) {
+			goto cleanup;
+		}
+	} else if (strcmp(option, "--check-log") == 0) {
+		result = filemonitor_check_log();
+		if (result != FILEMONITOR_SUCCESS) {
+			goto cleanup;
+		}
 	} else if (strcmp(option, "--edit-config") == 0) {
+		if (result != FILEMONITOR_SUCCESS) {
+			goto cleanup;
+		}
 		result = filemonitor_edit_config();
 	} else if (strcmp(option, "--error-codes") == 0) {
 		filemonitor_print_error_codes();
@@ -96,17 +108,25 @@ enum filemonitor_error_code filemonitor_edit_config(void)
 	return FILEMONITOR_SUCCESS;
 }
 
+enum filemonitor_error_code filemonitor_check_log(void)
+{
+	return FILEMONITOR_SUCCESS;
+}
+
 void filemonitor_print_help(void)
 {
 	printf("FileMonitor: Help Page\n");
 	printf("Options:\n");
-	printf("\t--check-config\t\tChecks the config file to\n");
-	printf("\t\t\t\tMake sure the formatting is correct.\n");
-	printf("\t\t\t\tNB. It will remove any bad formatting\n");
-	printf("\t--edit-config\t\tModifies the config file\n");
-	printf("\t--help\t\t\tBrings up this help page\n");
-	printf("\t--run\t\t\tRuns FileMonitor\n");
-	printf("\t--version\t\t\tPrints the current version of FileMonitor\n");
+	printf("\t--check-config\tChecks the config file to\n");
+	printf("\t\t\tMake sure the formatting is correct.\n");
+	printf("\t\t\tNB. It will remove any bad formatting\n");
+	printf("\t--check-log\tEnters a menu to choose a\n");
+	printf("\t\t\tlog file then prints the choice to\n");
+	printf("\t\t\tscreen\n");
+	printf("\t--edit-config\tModifies the config file\n");
+	printf("\t--help\t\tBrings up this help page\n");
+	printf("\t--run\t\tRuns FileMonitor\n");
+	printf("\t--version\tPrints the current version of FileMonitor\n");
 }
 
 void filemonitor_print_error_codes(void)
