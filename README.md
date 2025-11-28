@@ -11,11 +11,43 @@ Email notifications would be great too.
 
 It uses a .conf file to read configurations.
 For example:
-filesize=5GB # Flags file sizes above 5GB
-dirsize=1000 # Flags directory sizes above 1000 files (shallow)
-admin=networktomp # Administrator's name
-adminemail=networktomp@webmail.com # email to send notifications to
-ignoredir=/root # set directories to ignore (recursively)
-ignoredir=/sbin
-ignorefile=*.mp4 # Set files to ignore
-ignorefile=/home/user/src/really_important_project.c
+###                         ###
+### FileMonitor Config File ###
+###                         ###
+
+### Rules ###
+# Comments must be on a separate line
+# Eliminate spaces before and after the equals sign
+# Filepaths must be full paths starting with /
+
+### Admin details ###
+# Name of Administrator. This is for address only.
+admin=networktomp
+# Choose an email for notifications to be sent to for remote system
+# auditing
+adminemail=networktomp@webmail.com
+
+### General Size Monitoring ###
+# Set the max size a file can be before it is flagged by FileMonitor
+file_max_size=5368709120
+# Set the max size a directory can be before it is flagged by
+# FileMonitor
+dir_max_sizesize=1000
+# Set files and directories to ignore. Use full filepath
+ignore_dir=/root
+ignore_dir=/tmp
+ignore_file=*.mp4
+ignore_file=/home/user/src/really_important_project.c
+
+### Individual File Monitoring ###
+# Choose a specific file or files for auditing. Log files are kept in
+# FileMonitor/log
+monitor_file=/etc/passwd
+
+### Logging ###
+# Choose how big a log file should grow before it is moved to FileMonitor/tmp
+log_max_size=1048576
+# Choose how long a log file should remain in FileMonitor/tmp before it
+# is deleted
+log_retention
+
