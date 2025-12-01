@@ -8,8 +8,9 @@
 #include<errno.h> /* errno */
 
 #define LINE_MAX 256
-#define CONFIG_PATH "/home/networktom/C/src/FileMonitor/FileMonitor.conf"
-#define TEMP_CONFIG_PATH "/home/networktom/C/src/FileMonitor/FileMonitor.conf.tmp"
+#define CONFIG_PATH "/etc/FileMonitor.conf"
+#define TEMP_CONFIG_PATH "/etc/FileMonitor.conf.tmp"
+#define LOG_PATH "/var/log/FileMonitor/FileMonitor.log"
 
 enum filemonitor_error_code {
 	FILEMONITOR_SUCCESS = 0,
@@ -22,14 +23,17 @@ enum filemonitor_error_code {
 	FILEMONITOR_FAILURE_EDIT_CONFIG_VIM_NOT_INSTALLED,
 	FILEMONITOR_FAILURE_CHECK_CONFIG_FOPEN_FAILED,
 	FILEMONITOR_FAILURE_CHECK_CONFIG_FPUTS_FAILED,
-	FILEMONITOR_FAILURE_CHECK_CONFIG_RENAME_FAILED
+	FILEMONITOR_FAILURE_CHECK_CONFIG_RENAME_FAILED,
+	FILEMONITOR_FAILURE_CHECK_LOG_FORK_FAILED,
+	FILEMONITOR_FAILURE_CHECK_LOG_VIM_NOT_INSTALLED,
+	FILEMONITOR_FAILURE_CHECK_LOG_WAITPID_FAILED
 };
 
 enum filemonitor_error_code filemonitor_exec(void);
 enum filemonitor_error_code filemonitor_check_config(void);
 bool is_valid_config_line(const char *line);
-enum filemonitor_error_code filemonitor_edit_config(void);
 enum filemonitor_error_code filemonitor_check_log(void);
+enum filemonitor_error_code filemonitor_edit_config(void);
 void filemonitor_print_help(void);
 void filemonitor_print_error_codes(void);
 void filemonitor_print_version(void);
@@ -59,10 +63,10 @@ int main (int argc, char *argv[])
 			goto cleanup;
 		}
 	} else if (strcmp(option, "--edit-config") == 0) {
+		result = filemonitor_edit_config();
 		if (result != FILEMONITOR_SUCCESS) {
 			goto cleanup;
 		}
-		result = filemonitor_edit_config();
 	} else if (strcmp(option, "--error-codes") == 0) {
 		filemonitor_print_error_codes();
 	} else if (strcmp(option, "--help") == 0) {
@@ -197,6 +201,26 @@ bool is_valid_config_line(const char *line)
 	return true;
 }
 
+enum filemonitor_error_code filemonitor_check_log(void)
+{
+	pid_t pid;
+	pid = fork();
+	if (pid < 0) {
+		return FILEMONITOR_FAILURE_CHECK_LOG_FORK_FAILED;
+	} else if (pid == 0) {
+		execlp("vim", "vim", LOG_PATH, (char *)NULL);
+		perror("execlp failed to launch vim");
+    		exit(FILEMONITOR_FAILURE_CHECK_LOG_VIM_NOT_INSTALLED);
+	} else {
+		pid_t terminated_pid = waitpid(pid, NULL, 0);
+		if (terminated_pid == -1) {
+			return FILEMONITOR_FAILURE_EDIT_CONFIG_WAITPID_FAILED;
+		}
+	}
+
+	return FILEMONITOR_SUCCESS;
+}
+
 enum filemonitor_error_code filemonitor_edit_config(void)
 {
 	pid_t pid;
@@ -204,7 +228,7 @@ enum filemonitor_error_code filemonitor_edit_config(void)
 	if (pid < 0) {
 		return FILEMONITOR_FAILURE_EDIT_CONFIG_FORK_FAILED;
 	} else if (pid == 0) {
-		execlp("vim", "vim", "/home/networktom/C/src/FileMonitor/FileMonitor.conf", (char *)NULL);
+		execlp("vim", "vim", CONFIG_PATH, (char *)NULL);
 		perror("execlp failed to launch vim");
     		exit(FILEMONITOR_FAILURE_EDIT_CONFIG_VIM_NOT_INSTALLED);
 	} else {
@@ -218,11 +242,6 @@ enum filemonitor_error_code filemonitor_edit_config(void)
 	printf("Please test it first with:\n");
 	printf("\tFileMonitor --check-config\n");
 
-	return FILEMONITOR_SUCCESS;
-}
-
-enum filemonitor_error_code filemonitor_check_log(void)
-{
 	return FILEMONITOR_SUCCESS;
 }
 
@@ -255,6 +274,9 @@ void filemonitor_print_error_codes(void)
 	printf("\t%d\t= fopen() failed to open FileMonitor.conf for read/write in function filemonitor_check_config(). File does not exist.\n", FILEMONITOR_FAILURE_CHECK_CONFIG_FOPEN_FAILED);
 	printf("\t%d\t= fputs() failed to write to FileMonitor.conf.tmp in function filemonitor_check_config()\n", FILEMONITOR_FAILURE_CHECK_CONFIG_FPUTS_FAILED);
 	printf("\t%d\t= rename() failed to rename FileMonitor.conf.tmp to FileMonitor.conf in function filemonitor_check_config()\n", FILEMONITOR_FAILURE_CHECK_CONFIG_RENAME_FAILED);
+	printf("\t%d\t= Could not fork a new process when attempting to edit FileMonitor.log in function filemonitor_check_log()\n", FILEMONITOR_FAILURE_CHECK_LOG_FORK_FAILED);
+	printf("\t%d\t= Could not find Vim in function filemonitor_check_log()\n", FILEMONITOR_FAILURE_CHECK_LOG_VIM_NOT_INSTALLED);
+	printf("\t%d\t= waitpid() failed in function filemonitor_check_log()\n", FILEMONITOR_FAILURE_CHECK_LOG_WAITPID_FAILED);
 }
 
 void filemonitor_print_version(void)
