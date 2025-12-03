@@ -1,0 +1,3 @@
+[submodule "libpvars"]
+	path = libpvars
+	url = https://github.com/networktomp-dev/libpvars.git

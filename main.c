@@ -6,6 +6,9 @@
 #include<sys/wait.h> /* waitpid() */
 #include<stdbool.h> /* bool */
 #include<errno.h> /* errno */
+#include<stdint.h> /* uint64_t uint32_t uint8_t */
+
+#include"pvars.h" /* plist_t */
 
 #define LINE_MAX 256
 #define CONFIG_PATH "/etc/FileMonitor.conf"
@@ -26,10 +29,24 @@ enum filemonitor_error_code {
 	FILEMONITOR_FAILURE_CHECK_CONFIG_RENAME_FAILED,
 	FILEMONITOR_FAILURE_CHECK_LOG_FORK_FAILED,
 	FILEMONITOR_FAILURE_CHECK_LOG_VIM_NOT_INSTALLED,
-	FILEMONITOR_FAILURE_CHECK_LOG_WAITPID_FAILED
+	FILEMONITOR_FAILURE_CHECK_LOG_WAITPID_FAILED,
+	FILEMONITOR_RUN_GET_CONFIG_FAILED
 };
 
-enum filemonitor_error_code filemonitor_exec(void);
+struct config_data {
+	char *admin;
+	char *adminemail;
+	uint64_t file_max_size;
+	uint64_t log_max_size;
+	uint32_t dir_max_size;
+	uint8_t log_retention;
+	plist_t *ignore_dir;
+	plist_t *ignore_file;
+	plist_t *monitor_file;
+};
+
+enum filemonitor_error_code filemonitor_run(void);
+struct config_data *filemonitor_get_config(void);
 enum filemonitor_error_code filemonitor_check_config(void);
 bool is_valid_config_line(const char *line);
 enum filemonitor_error_code filemonitor_check_log(void);
@@ -48,7 +65,7 @@ int main (int argc, char *argv[])
 	enum filemonitor_error_code result = FILEMONITOR_CLEAR;
 	char *option = argv[1];
 	if (strcmp(option, "--run") == 0) {
-		result = filemonitor_exec();
+		result = filemonitor_run();
 		if (result != FILEMONITOR_SUCCESS) {
 			goto cleanup;
 		}
@@ -87,9 +104,19 @@ cleanup:
 	return FILEMONITOR_FAILURE;
 }
 
-enum filemonitor_error_code filemonitor_exec(void)
+enum filemonitor_error_code filemonitor_run(void)
 {
+	struct config_data *data = filemonitor_get_config();
+	if (data == NULL) {
+		return FILEMONITOR_RUN_GET_CONFIG_FAILED;
+	}
+
 	return FILEMONITOR_SUCCESS;
+}
+
+struct config_data *filemonitor_get_config(void)
+{
+	return NULL;
 }
 
 enum filemonitor_error_code filemonitor_check_config(void)
@@ -251,14 +278,16 @@ void filemonitor_print_help(void)
 	printf("Options:\n");
 	printf("\t--check-config\tChecks the config file to\n");
 	printf("\t\t\tMake sure the formatting is correct.\n");
-	printf("\t\t\tNB. It will remove any bad formatting\n");
+	printf("\t\t\tNB. It will remove any bad formatting.\n");
 	printf("\t--check-log\tEnters a menu to choose a\n");
 	printf("\t\t\tlog file then prints the choice to\n");
-	printf("\t\t\tscreen\n");
-	printf("\t--edit-config\tModifies the config file\n");
-	printf("\t--help\t\tBrings up this help page\n");
-	printf("\t--run\t\tRuns FileMonitor\n");
-	printf("\t--version\tPrints the current version of FileMonitor\n");
+	printf("\t\t\tscreen.\n");
+	printf("\t--edit-config\tModifies the config file.\n");
+	printf("\t--error-codes\tDisplays the error code page for\n");
+	printf("\t\t\thandy troubleshooting.\n");
+	printf("\t--help\t\tBrings up this help page.\n");
+	printf("\t--run\t\tRuns FileMonitor.\n");
+	printf("\t--version\tPrints the current version of FileMonitor.\n");
 }
 
 void filemonitor_print_error_codes(void)
@@ -277,6 +306,7 @@ void filemonitor_print_error_codes(void)
 	printf("\t%d\t= Could not fork a new process when attempting to edit FileMonitor.log in function filemonitor_check_log()\n", FILEMONITOR_FAILURE_CHECK_LOG_FORK_FAILED);
 	printf("\t%d\t= Could not find Vim in function filemonitor_check_log()\n", FILEMONITOR_FAILURE_CHECK_LOG_VIM_NOT_INSTALLED);
 	printf("\t%d\t= waitpid() failed in function filemonitor_check_log()\n", FILEMONITOR_FAILURE_CHECK_LOG_WAITPID_FAILED);
+	printf("\t%d\t= filemonitor_get_config() failed in function filemonitor_run()\n", FILEMONITOR_RUN_GET_CONFIG_FAILED);
 }
 
 void filemonitor_print_version(void)
