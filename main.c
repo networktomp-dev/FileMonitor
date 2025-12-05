@@ -14,6 +14,7 @@
 #define CONFIG_PATH "/etc/FileMonitor.conf"
 #define TEMP_CONFIG_PATH "/etc/FileMonitor.conf.tmp"
 #define LOG_PATH "/var/log/FileMonitor/FileMonitor.log"
+#define ERROR_LOG_PATH "/var/log/FileMonitor/FileMonitor_error.log"
 
 enum filemonitor_error_code {
 	FILEMONITOR_SUCCESS = 0,
@@ -30,7 +31,10 @@ enum filemonitor_error_code {
 	FILEMONITOR_FAILURE_CHECK_LOG_FORK_FAILED,
 	FILEMONITOR_FAILURE_CHECK_LOG_VIM_NOT_INSTALLED,
 	FILEMONITOR_FAILURE_CHECK_LOG_WAITPID_FAILED,
-	FILEMONITOR_RUN_GET_CONFIG_FAILED
+	FILEMONITOR_RUN_GET_CONFIG_FAILED,
+	FILEMONITOR_FAILURE_VIEW_ERROR_LOG_FORK_FAILED,
+	FILEMONITOR_FAILURE_VIEW_ERROR_LOG_LESS_NOT_INSTALLED,
+	FILEMONITOR_FAILURE_VIEW_ERROR_LOG_WAITPID_FAILED
 };
 
 struct config_data {
@@ -48,11 +52,13 @@ struct config_data {
 enum filemonitor_error_code filemonitor_run(void);
 struct config_data *filemonitor_get_config(void);
 enum filemonitor_error_code filemonitor_check_config(void);
+void filemonitor_print_to_error_log(enum filemonitor_error_code result);
 bool is_valid_config_line(const char *line);
 enum filemonitor_error_code filemonitor_check_log(void);
 enum filemonitor_error_code filemonitor_edit_config(void);
 void filemonitor_print_help(void);
 void filemonitor_print_error_codes(void);
+enum filemonitor_error_code filemonitor_view_error_log(void);
 void filemonitor_print_version(void);
 
 int main (int argc, char *argv[])
@@ -86,6 +92,8 @@ int main (int argc, char *argv[])
 		}
 	} else if (strcmp(option, "--error-codes") == 0) {
 		filemonitor_print_error_codes();
+	} else if (strcmp(option, "--error-log") == 0) {
+		filemonitor_view_error_log();
 	} else if (strcmp(option, "--help") == 0) {
 		filemonitor_print_help();
 	} else if (strcmp(option, "--version") == 0) {
@@ -101,6 +109,7 @@ int main (int argc, char *argv[])
 
 cleanup:
 	fprintf(stderr, "FileMonitor: Error code %d\n", result);
+	filemonitor_print_to_error_log(result);
 	return FILEMONITOR_FAILURE;
 }
 
@@ -117,6 +126,23 @@ enum filemonitor_error_code filemonitor_run(void)
 struct config_data *filemonitor_get_config(void)
 {
 	return NULL;
+}
+
+void filemonitor_print_to_error_log(enum filemonitor_error_code result)
+{
+	FILE *error_log = NULL;
+
+	if ((error_log = fopen("/var/log/FileMonitor/FileMonitor_error.log", "a")) == NULL) {
+		perror("error opening FileMonitor_error.log for appending");
+		return;
+	}
+
+	fprintf(error_log, "FileMonitor finished with error code %d.\n run \"FileMonitor --error-codes\" for more details.\n", result);
+
+	if (fclose(error_log) == EOF) {
+		perror("Error closing FileMonitor_error.log");
+		return;
+	}
 }
 
 enum filemonitor_error_code filemonitor_check_config(void)
@@ -307,6 +333,30 @@ void filemonitor_print_error_codes(void)
 	printf("\t%d\t= Could not find Vim in function filemonitor_check_log()\n", FILEMONITOR_FAILURE_CHECK_LOG_VIM_NOT_INSTALLED);
 	printf("\t%d\t= waitpid() failed in function filemonitor_check_log()\n", FILEMONITOR_FAILURE_CHECK_LOG_WAITPID_FAILED);
 	printf("\t%d\t= filemonitor_get_config() failed in function filemonitor_run()\n", FILEMONITOR_RUN_GET_CONFIG_FAILED);
+	printf("\t%d\t= fork() failed in function filemonitor_view_error_log()\n", FILEMONITOR_FAILURE_VIEW_ERROR_LOG_FORK_FAILED);
+	printf("\t%d\t= waitpid() failed in function filemonitor_view_error_log()\n", FILEMONITOR_FAILURE_VIEW_ERROR_LOG_WAITPID_FAILED);
+}
+
+enum filemonitor_error_code filemonitor_view_error_log(void)
+{
+	pid_t pid;
+	pid = fork();
+	if (pid < 0) {
+		return FILEMONITOR_FAILURE_VIEW_ERROR_LOG_FORK_FAILED;
+	} else if (pid == 0) {
+		execlp("less", "less", "+G", ERROR_LOG_PATH, (char *)NULL);
+		perror("execlp failed to launch less");
+    		exit(FILEMONITOR_FAILURE_VIEW_ERROR_LOG_LESS_NOT_INSTALLED);
+	} else {
+		pid_t terminated_pid = waitpid(pid, NULL, 0);
+		if (terminated_pid == -1) {
+			return FILEMONITOR_FAILURE_VIEW_ERROR_LOG_WAITPID_FAILED;
+		}
+	}
+
+	printf("Finished viewing FileMonitor_error.log\n");
+	
+	return FILEMONITOR_SUCCESS;
 }
 
 void filemonitor_print_version(void)
@@ -315,5 +365,6 @@ void filemonitor_print_version(void)
 	printf("Download and install the latest version with:\n");
 	printf("git clone https://github.com/networktomp-dev/FileMonitor.git\n");
 	printf("cd FileMonitor\n");
+	printf("git submodule update --init --recursive\n");
 	printf("make\n");
 }

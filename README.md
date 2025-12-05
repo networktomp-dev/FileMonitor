@@ -4,6 +4,15 @@ A basic CLI utility to monitor excessively large files or directories
 with too many files in it. Perfect for monitoring a server where
 there are many users.
 
+------
+install with:
+git clone https://github.com/networktomp-dev/FileMonitor.git
+cd FileMonitor
+git submodule update --init --recursive
+make
+
+------
+
 It is designed to be run via a Cronjob and must have root privileges.
 
 It will write suspicious activity to a .log file for review upon login.
