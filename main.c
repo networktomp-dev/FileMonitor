@@ -20,6 +20,7 @@ enum filemonitor_error_code {
 	FILEMONITOR_SUCCESS = 0,
 	FILEMONITOR_CLEAR = 0,
 	FILEMONITOR_FAILURE,
+	FILEMONITOR_FAILURE_IS_NOT_ROOT,
 	FILEMONITOR_FAILURE_WRONG_NUMBER_OF_ARGUMENTS,
 	FILEMONITOR_FAILURE_UNKNOWN_OPTION,
 	FILEMONITOR_FAILURE_EDIT_CONFIG_WAITPID_FAILED,
@@ -49,6 +50,7 @@ struct config_data {
 	plist_t *monitor_file;
 };
 
+bool is_running_as_root(void);
 enum filemonitor_error_code filemonitor_run(void);
 struct config_data *filemonitor_get_config(void);
 enum filemonitor_error_code filemonitor_check_config(void);
@@ -63,6 +65,14 @@ void filemonitor_print_version(void);
 
 int main (int argc, char *argv[])
 {
+	if (is_running_as_root() == false) {
+		fprintf(stderr, "ERROR: FileMonitor requires root privileges to run\n");
+		fprintf(stderr, "Run with sudo:\n");
+		fprintf(stderr, "\tsudo FileMonitor [ARG]\n");
+
+		return FILEMONITOR_FAILURE_IS_NOT_ROOT;
+	}
+
 	if (argc != 2) {
 		fprintf(stderr, "FileMonitor expects a max of one option only\n");
 		return FILEMONITOR_FAILURE_WRONG_NUMBER_OF_ARGUMENTS;
@@ -111,6 +121,17 @@ cleanup:
 	fprintf(stderr, "FileMonitor: Error code %d\n", result);
 	filemonitor_print_to_error_log(result);
 	return FILEMONITOR_FAILURE;
+}
+
+bool is_running_as_root(void)
+{
+	if (geteuid() == 0)
+	{
+		return true; // Success: Running as root
+	} else
+	{
+		return false; // Failure: Not running as root
+	}
 }
 
 enum filemonitor_error_code filemonitor_run(void)
@@ -321,6 +342,7 @@ void filemonitor_print_error_codes(void)
 	printf("FileMonitor: Error Codes Page\n");
 	printf("\t%d\t= SUCCESS\n", FILEMONITOR_SUCCESS);
 	printf("\t%d\t= Encountered a general failure.\n", FILEMONITOR_FAILURE);
+	printf("\t%d\t= FileMonitor is not being run with sufficient privileges\n", FILEMONITOR_FAILURE_IS_NOT_ROOT);
 	printf("\t%d\t= Received the wrong number of arguments.\n", FILEMONITOR_FAILURE_WRONG_NUMBER_OF_ARGUMENTS);
 	printf("\t%d\t= Received an unknown option.\n", FILEMONITOR_FAILURE_UNKNOWN_OPTION);
 	printf("\t%d\t= Could not fork a new process when attempting to edit FileMonitor.conf in function filemonitor_edit_config\n", FILEMONITOR_FAILURE_EDIT_CONFIG_FORK_FAILED);
